@@ -227,6 +227,10 @@ def generate_forecast(model, features, recent_data, hours=72):
 # API ENDPOINTS
 # ══════════════════════════════════════════════
 
+@app.head("/", include_in_schema=False)
+async def head_dashboard():
+    return JSONResponse(status_code=200, content={})
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, district: str = "Abbottabad"):
     """Serve the main dashboard HTML page."""
