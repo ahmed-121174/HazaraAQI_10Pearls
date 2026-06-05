@@ -48,12 +48,37 @@ templates = Jinja2Templates(directory=templates_dir)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
+import threading
+import time
+
+def background_preload():
+    print("  [FastAPI] Background pre-loading started...")
+    try:
+        load_model(use_network=True)
+    except Exception as e:
+        print(f"  [FastAPI] Background load_model failed: {e}")
+    try:
+        load_data(use_network=True)
+    except Exception as e:
+        print(f"  [FastAPI] Background load_data failed: {e}")
+    print("  [FastAPI] Background initial pre-loading complete.")
+    
+    # Periodic refresh loop (every 15 minutes)
+    while True:
+        time.sleep(900)
+        print("  [FastAPI] Background periodic cache refresh started...")
+        try:
+            load_model(use_network=True)
+            load_data(use_network=True)
+            print("  [FastAPI] Background periodic cache refresh complete.")
+        except Exception as e:
+            print(f"  [FastAPI] Background periodic cache refresh failed: {e}")
+
 @app.on_event("startup")
 async def startup_event():
-    print("  [FastAPI] Pre-loading model and data at startup...")
-    load_model()
-    load_data()
-    print("  [FastAPI] Startup initialization complete.")
+    print("  [FastAPI] Spawning background pre-loading thread...")
+    threading.Thread(target=background_preload, daemon=True).start()
+    print("  [FastAPI] Startup event completed, accepting connections.")
 
 
 # ── Constants ──
@@ -79,15 +104,15 @@ _cached_data_time = None
 
 
 # ── Helper Functions ──
-def load_model():
+def load_model(use_network=False):
     """Load model and features. Attempts to load from Hopsworks Model Registry first, then falls back to disk."""
     global _cached_model, _cached_features, _cached_model_name
-    if _cached_model is not None:
+    if not use_network and _cached_model is not None:
         return _cached_model, _cached_features, _cached_model_name
 
     model, features = None, None
     
-    if os.getenv("HOPSWORKS_API_KEY"):
+    if use_network and os.getenv("HOPSWORKS_API_KEY"):
         try:
             from src.feature_store import get_hopsworks_connection
             project = get_hopsworks_connection()
@@ -118,6 +143,8 @@ def load_model():
                 features = pickle.load(f)
         except Exception as e:
             print(f"  [FastAPI] Local model load failed: {e}")
+            if _cached_model is not None:
+                return _cached_model, _cached_features, _cached_model_name
             return None, None, "Unknown"
 
     name = type(model).__name__
@@ -137,30 +164,33 @@ def load_model():
     return _cached_model, _cached_features, _cached_model_name
 
 
-def load_data(district=None):
+def load_data(district=None, use_network=False):
     """Load cleaned data. Attempts to fetch features from Hopsworks Feature Store first, then falls back to CSV."""
     global _cached_data, _cached_data_time
     now = datetime.now()
     df = None
     
-    if _cached_data is not None and _cached_data_time is not None and (now - _cached_data_time).total_seconds() < 900:
+    if not use_network and _cached_data is not None and _cached_data_time is not None and (now - _cached_data_time).total_seconds() < 900:
         df = _cached_data
     else:
-        if os.getenv("HOPSWORKS_API_KEY"):
+        if use_network and os.getenv("HOPSWORKS_API_KEY"):
             try:
                 from src.feature_store import get_features
                 print("  [FastAPI] Attempting to fetch features from Hopsworks Feature Store...")
                 df = get_features()
             except Exception as e:
-                print(f"  [FastAPI] Hopsworks feature fetch failed (falling back to CSV): {e}")
+                print(f"  [FastAPI] Hopsworks feature fetch failed: {e}")
 
-        # Fallback to local cleaned CSV
+        # Fallback to local cleaned CSV or previous cache
         if df is None or df.empty:
-            try:
-                df = pd.read_csv(DATA_PATH, parse_dates=["date"])
-            except Exception as e:
-                print(f"  [FastAPI] Local data load failed: {e}")
-                return pd.DataFrame()
+            if _cached_data is not None:
+                df = _cached_data
+            else:
+                try:
+                    df = pd.read_csv(DATA_PATH, parse_dates=["date"])
+                except Exception as e:
+                    print(f"  [FastAPI] Local data load failed: {e}")
+                    return pd.DataFrame()
         
         if df is not None and not df.empty:
             _cached_data = df
