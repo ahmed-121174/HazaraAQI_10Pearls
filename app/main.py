@@ -47,6 +47,15 @@ os.makedirs(static_dir, exist_ok=True)
 templates = Jinja2Templates(directory=templates_dir)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+
+@app.on_event("startup")
+async def startup_event():
+    print("  [FastAPI] Pre-loading model and data at startup...")
+    load_model()
+    load_data()
+    print("  [FastAPI] Startup initialization complete.")
+
+
 # ── Constants ──
 HAZARA_DISTRICTS = [
     "Abbottabad", "Mansehra", "Haripur",
@@ -60,9 +69,22 @@ RESULTS_PATH = os.path.join(project_root, "models", "training_results.csv")
 SHAP_PATH = os.path.join(project_root, "models", "shap_importance.csv")
 
 
+# ── Global Cache ──
+_cached_model = None
+_cached_features = None
+_cached_model_name = None
+
+_cached_data = None
+_cached_data_time = None
+
+
 # ── Helper Functions ──
 def load_model():
     """Load model and features. Attempts to load from Hopsworks Model Registry first, then falls back to disk."""
+    global _cached_model, _cached_features, _cached_model_name
+    if _cached_model is not None:
+        return _cached_model, _cached_features, _cached_model_name
+
     model, features = None, None
     
     if os.getenv("HOPSWORKS_API_KEY"):
@@ -107,28 +129,42 @@ def load_model():
         "GradientBoostingRegressor": "Gradient Boosting",
         "Sequential": "LSTM (Deep Learning)",
     }
-    return model, features, name_map.get(name, name)
+    
+    model_name = name_map.get(name, name)
+    _cached_model = model
+    _cached_features = features
+    _cached_model_name = model_name
+    return _cached_model, _cached_features, _cached_model_name
 
 
 def load_data(district=None):
     """Load cleaned data. Attempts to fetch features from Hopsworks Feature Store first, then falls back to CSV."""
+    global _cached_data, _cached_data_time
+    now = datetime.now()
     df = None
     
-    if os.getenv("HOPSWORKS_API_KEY"):
-        try:
-            from src.feature_store import get_features
-            print("  [FastAPI] Attempting to fetch features from Hopsworks Feature Store...")
-            df = get_features()
-        except Exception as e:
-            print(f"  [FastAPI] Hopsworks feature fetch failed (falling back to CSV): {e}")
+    if _cached_data is not None and _cached_data_time is not None and (now - _cached_data_time).total_seconds() < 900:
+        df = _cached_data
+    else:
+        if os.getenv("HOPSWORKS_API_KEY"):
+            try:
+                from src.feature_store import get_features
+                print("  [FastAPI] Attempting to fetch features from Hopsworks Feature Store...")
+                df = get_features()
+            except Exception as e:
+                print(f"  [FastAPI] Hopsworks feature fetch failed (falling back to CSV): {e}")
 
-    # Fallback to local cleaned CSV
-    if df is None or df.empty:
-        try:
-            df = pd.read_csv(DATA_PATH, parse_dates=["date"])
-        except Exception as e:
-            print(f"  [FastAPI] Local data load failed: {e}")
-            return pd.DataFrame()
+        # Fallback to local cleaned CSV
+        if df is None or df.empty:
+            try:
+                df = pd.read_csv(DATA_PATH, parse_dates=["date"])
+            except Exception as e:
+                print(f"  [FastAPI] Local data load failed: {e}")
+                return pd.DataFrame()
+        
+        if df is not None and not df.empty:
+            _cached_data = df
+            _cached_data_time = now
 
     if district and "district" in df.columns:
         df = df[df["district"] == district]
