@@ -432,7 +432,7 @@ def save_shap_importance(model, df, feature_cols):
 # ============================================================
 # STEP 6: HOPSWORKS FEATURE STORE (Optional)
 # ============================================================
-def push_to_hopsworks(feat_df):
+def push_to_hopsworks(feat_df, rmse=None):
     """Upload features and model to Hopsworks if API key is available."""
     print("\n" + "=" * 60)
     print("  STEP 6: HOPSWORKS FEATURE STORE")
@@ -443,7 +443,8 @@ def push_to_hopsworks(feat_df):
         
         success = upload_features(feat_df)
         if success:
-            register_model(MODELS_DIR, metrics={"pipeline": "complete"})
+            metrics = {"rmse": float(rmse)} if rmse is not None else {}
+            register_model(MODELS_DIR, metrics=metrics)
         else:
             print("  [Hopsworks] Skipped (no API key or connection failed)")
     except ImportError:
@@ -485,7 +486,7 @@ if __name__ == "__main__":
     save_shap_importance(best_model, feat_df, feature_cols)
 
     # Step 6: Hopsworks Feature Store (optional)
-    push_to_hopsworks(feat_df)
+    push_to_hopsworks(feat_df, rmse=best_score)
 
     print("\n" + "=" * 60)
     print(f"  PIPELINE COMPLETE!")
