@@ -32,9 +32,12 @@ jobs:
         run: python run_pipeline.py
 
       - name: Commit and push updated models
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add models/ data/*.csv
-          git commit -m "Daily model retrain [skip ci]" || echo "No changes"
-          git push
+          git diff --staged --quiet || git commit -m "Daily model retrain [skip ci]"
+          git push https://x-access-token:${GITHUB_TOKEN}@github.com/ahmed-121174/HazaraAQI_10Pearls.git HEAD:main
+
