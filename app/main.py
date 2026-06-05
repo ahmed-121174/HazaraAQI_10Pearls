@@ -75,6 +75,7 @@ _cached_features = None
 _cached_model_name = None
 
 _cached_data = None
+_cached_forecasts = {}
 
 
 # ── Helper Functions ──
@@ -218,28 +219,39 @@ async def dashboard(request: Request, district: str = "Abbottabad"):
 
         # Forecast
         if model and features:
-            recent = df.tail(100).copy()
-            if "district" in recent.columns:
-                recent = recent.drop(columns=["district"])
-            try:
-                forecast = generate_forecast(model, features, recent)
-                # Daily averages for 3 day cards
-                fc_df = pd.DataFrame(forecast)
-                fc_df["date_parsed"] = pd.to_datetime(fc_df["date"])
-                fc_df["day"] = fc_df["date_parsed"].dt.date
-                today = datetime.now().date()
-                fc_df = fc_df[fc_df["day"] > today]
-                daily = fc_df.groupby("day")["predicted_aqi"].mean().head(3)
-                for day, avg in daily.items():
-                    label, color, _ = get_aqi_category(int(avg))
-                    daily_forecast.append({
-                        "day_name": pd.Timestamp(day).strftime("%A, %d %b"),
-                        "avg_aqi": int(round(avg)),
-                        "color": color,
-                        "label": label,
-                    })
-            except Exception as e:
-                print(f"Forecast error: {e}")
+            cache_key = (district, 72)
+            if cache_key in _cached_forecasts:
+                forecast = _cached_forecasts[cache_key]
+            else:
+                recent = df.tail(100).copy()
+                if "district" in recent.columns:
+                    recent = recent.drop(columns=["district"])
+                try:
+                    forecast = generate_forecast(model, features, recent)
+                    _cached_forecasts[cache_key] = forecast
+                except Exception as e:
+                    print(f"Forecast error: {e}")
+                    forecast = []
+            
+            if forecast:
+                try:
+                    # Daily averages for 3 day cards
+                    fc_df = pd.DataFrame(forecast)
+                    fc_df["date_parsed"] = pd.to_datetime(fc_df["date"])
+                    fc_df["day"] = fc_df["date_parsed"].dt.date
+                    today = datetime.now().date()
+                    fc_df = fc_df[fc_df["day"] > today]
+                    daily = fc_df.groupby("day")["predicted_aqi"].mean().head(3)
+                    for day, avg in daily.items():
+                        label, color, _ = get_aqi_category(int(avg))
+                        daily_forecast.append({
+                            "day_name": pd.Timestamp(day).strftime("%A, %d %b"),
+                            "avg_aqi": int(round(avg)),
+                            "color": color,
+                            "label": label,
+                        })
+                except Exception as e:
+                    print(f"Forecast parsing error: {e}")
 
     # Model results
     model_results = []
@@ -320,10 +332,15 @@ async def api_forecast(district: str = "Abbottabad", hours: int = 72):
     df = load_data(district)
     if df.empty:
         return JSONResponse({"error": "No data"}, status_code=404)
-    recent = df.tail(100).copy()
-    if "district" in recent.columns:
-        recent = recent.drop(columns=["district"])
-    preds = generate_forecast(model, features, recent, hours=min(hours, 168))
+    cache_key = (district, hours)
+    if cache_key in _cached_forecasts:
+        preds = _cached_forecasts[cache_key]
+    else:
+        recent = df.tail(100).copy()
+        if "district" in recent.columns:
+            recent = recent.drop(columns=["district"])
+        preds = generate_forecast(model, features, recent, hours=min(hours, 168))
+        _cached_forecasts[cache_key] = preds
     return {"district": district, "model": name, "forecast": preds}
 
 
