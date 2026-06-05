@@ -10,6 +10,7 @@
 
 The system is deployed live in production:
 * **Production URL**: [https://hazara-aqi.onrender.com](https://hazara-aqi.onrender.com)
+* **Accessing Detailed Data**: To view or export complete time-series forecasts, navigate to the **Data & Export** tab for your selected city and click **Download Full 72-Hour CSV** at the bottom of the page.
 
 ---
 
