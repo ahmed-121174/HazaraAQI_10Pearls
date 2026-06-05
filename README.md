@@ -6,6 +6,13 @@
 
 ---
 
+## Live Production Application
+
+The system is deployed live in production:
+* **Production URL**: [https://hazara-aqi.onrender.com](https://hazara-aqi.onrender.com)
+
+---
+
 ## Project Overview
 
 The **Hazara Division AQI Prediction System** is an end-to-end, automated machine learning platform designed to forecast the Air Quality Index (AQI) for the **Hazara Division, Khyber Pakhtunkhwa (KPK), Pakistan**, for the next 72 hours.
