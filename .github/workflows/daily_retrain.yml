@@ -39,6 +39,5 @@ jobs:
           git config --local user.email "ahmed.ali01100001@gmail.com"
           git config --local user.name "Ahmed Ali"
           git add models/ data/*.csv
-          git diff --staged --quiet || git commit -m "[Daily] Retrained models + updated SHAP importance"
-          git push https://x-access-token:${GITHUB_TOKEN}@github.com/ahmed-121174/HazaraAQI_10Pearls.git HEAD:main
+          git diff --staged --quiet || (git commit -m "[Daily] Retrained models + updated SHAP importance" && git pull --rebase origin main && git push https://x-access-token:${GITHUB_TOKEN}@github.com/ahmed-121174/HazaraAQI_10Pearls.git HEAD:main)
 
