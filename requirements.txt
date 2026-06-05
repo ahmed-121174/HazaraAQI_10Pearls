@@ -14,7 +14,8 @@ requests-cache>=1.1
 retry-requests>=2.0
 
 # === Feature Store (Hopsworks) ===
-hopsworks>=3.7
+hopsworks[python]>=3.7
+confluent-kafka
 
 # === Web Framework (FastAPI) ===
 fastapi>=0.110

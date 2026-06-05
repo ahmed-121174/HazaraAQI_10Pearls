@@ -21,6 +21,7 @@ load_dotenv()
 
 HOPSWORKS_API_KEY = os.getenv("HOPSWORKS_API_KEY")
 HOPSWORKS_PROJECT = os.getenv("HOPSWORKS_PROJECT", "HazaraAQI")
+HOPSWORKS_HOST = os.getenv("HOPSWORKS_HOST", "eu-west.cloud.hopsworks.ai")
 
 def get_hopsworks_connection():
     """Establish connection to Hopsworks."""
@@ -31,6 +32,7 @@ def get_hopsworks_connection():
     try:
         import hopsworks
         project = hopsworks.login(
+            host=HOPSWORKS_HOST,
             api_key_value=HOPSWORKS_API_KEY,
             project=HOPSWORKS_PROJECT
         )

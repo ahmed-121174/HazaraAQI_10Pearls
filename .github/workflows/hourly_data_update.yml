@@ -26,13 +26,11 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run data ingestion
-        run: python src/data_ingestion.py
-
-      - name: Upload to Hopsworks (if configured)
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
-        run: echo "Hopsworks upload handled in data_ingestion.py"
+          HOPSWORKS_HOST: eu-west.cloud.hopsworks.ai
+        run: python src/data_ingestion.py
 
       - name: Commit updated data
         env:

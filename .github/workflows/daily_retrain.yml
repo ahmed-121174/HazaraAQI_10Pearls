@@ -29,6 +29,7 @@ jobs:
         env:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
+          HOPSWORKS_HOST: eu-west.cloud.hopsworks.ai
         run: python run_pipeline.py
 
       - name: Commit and push updated models
