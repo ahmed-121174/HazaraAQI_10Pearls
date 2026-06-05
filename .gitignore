@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Environment Variables (CRITICAL)
+.env
+
+# Catch-all for .cache
+.cache/
+.cache.sqlite
+
+# IDEs
+.idea/
+.vscode/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Project specific - keep model artifacts
+!models/model.pkl
+!models/features.pkl
+!models/lstm_model.keras
+!models/lstm_scaler.pkl
+!models/training_results.csv
+
+# Data cache from API
+data/.cache/
+data/.cache.sqlite
