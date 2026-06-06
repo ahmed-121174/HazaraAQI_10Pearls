@@ -234,9 +234,11 @@ async def dashboard(request: Request, district: str = "Abbottabad"):
                     # Daily averages for 3 day cards
                     fc_df = pd.DataFrame(forecast)
                     fc_df["date_parsed"] = pd.to_datetime(fc_df["date"])
-                    fc_df["day"] = fc_df["date_parsed"].dt.date
-                    today = datetime.now().date()
-                    fc_df = fc_df[fc_df["day"] > today]
+                    # Convert to Pakistan time to align with local day boundaries
+                    fc_df["date_local"] = fc_df["date_parsed"].dt.tz_convert("Asia/Karachi")
+                    fc_df["day"] = fc_df["date_local"].dt.date
+                    today = pd.Timestamp.now(tz="Asia/Karachi").date()
+                    fc_df = fc_df[fc_df["day"] >= today]
                     daily = fc_df.groupby("day")["predicted_aqi"].mean().head(3)
                     for day, avg in daily.items():
                         label, color, _ = get_aqi_category(int(avg))
