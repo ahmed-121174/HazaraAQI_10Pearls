@@ -63,17 +63,25 @@ SHAP_PATH = os.path.join(project_root, "models", "shap_importance.csv")
 # Global Cache
 _cached_model = None
 _cached_features = None
-_cached_model_name = None
+_cached_model_name = "Unknown"
+_cached_model_mtime = 0
 
 _cached_data = None
+_cached_data_mtime = 0
 _cached_forecasts = {}
 
 
 # Helper Functions
 def load_model():
     """Load model and features from local disk."""
-    global _cached_model, _cached_features, _cached_model_name
-    if _cached_model is not None:
+    global _cached_model, _cached_features, _cached_model_name, _cached_model_mtime
+    
+    try:
+        current_mtime = os.path.getmtime(MODEL_PATH)
+    except Exception:
+        current_mtime = 0
+
+    if _cached_model is not None and current_mtime == _cached_model_mtime:
         return _cached_model, _cached_features, _cached_model_name
 
     try:
@@ -81,6 +89,8 @@ def load_model():
             model = pickle.load(f)
         with open(FEATURES_PATH, "rb") as f:
             features = pickle.load(f)
+        _cached_model_mtime = current_mtime
+        print(f"  [FastAPI] Loaded fresh model from {MODEL_PATH} (mtime: {current_mtime})")
     except Exception as e:
         print(f"  [FastAPI] Local model load failed: {e}")
         return None, None, "Unknown"
@@ -104,13 +114,24 @@ def load_model():
 
 def load_data(district=None):
     """Load cleaned data from local CSV."""
-    global _cached_data
-    if _cached_data is not None:
+    global _cached_data, _cached_data_mtime, _cached_forecasts
+    
+    try:
+        current_mtime = os.path.getmtime(DATA_PATH)
+    except Exception:
+        current_mtime = 0
+
+    if _cached_data is not None and current_mtime == _cached_data_mtime:
         df = _cached_data
     else:
         try:
             df = pd.read_csv(DATA_PATH, parse_dates=["date"])
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"], utc=True)
             _cached_data = df
+            _cached_data_mtime = current_mtime
+            _cached_forecasts.clear()
+            print(f"  [FastAPI] Loaded fresh data from {DATA_PATH} (mtime: {current_mtime})")
         except Exception as e:
             print(f"  [FastAPI] Local data load failed: {e}")
             return pd.DataFrame()
@@ -136,7 +157,7 @@ def get_aqi_category(aqi):
         return "Hazardous", "#78716c", "Emergency conditions. Stay indoors."
 
 
-def generate_forecast(model, features, recent_data, hours=72):
+def generate_forecast(model, features, recent_data, full_df=None, hours=72):
     """Generate forecast for given hours."""
     predictions = []
     history = recent_data.tail(100).copy()
@@ -159,12 +180,26 @@ def generate_forecast(model, features, recent_data, hours=72):
         pred = np.clip(pred, 0, 500)
 
         next_dt = history["date"].iloc[-1] + pd.Timedelta(hours=1)
-        new_row = history.iloc[-1:].copy()
-        new_row["date"] = next_dt
+        
+        # Look up the actual future row in full_df to update variables like pm2_5, pm10, etc.
+        if full_df is not None and not full_df.empty:
+            future_match = full_df[full_df["date"] == next_dt]
+            if not future_match.empty:
+                new_row = future_match.iloc[0:1].copy()
+            else:
+                new_row = history.iloc[-1:].copy()
+                new_row["date"] = next_dt
+        else:
+            new_row = history.iloc[-1:].copy()
+            new_row["date"] = next_dt
+
         new_row["us_aqi"] = pred
         history = pd.concat([history, new_row], ignore_index=True)
+        
+        # Convert timezone to local Pakistan time for display/API output
+        local_dt = next_dt.tz_convert("Asia/Karachi")
         predictions.append({
-            "date": next_dt.isoformat(),
+            "date": local_dt.isoformat(),
             "hour": i + 1,
             "predicted_aqi": round(float(pred), 1)
         })
@@ -203,19 +238,26 @@ async def dashboard(request: Request, district: str = "Abbottabad"):
         latest = past_df.iloc[-1]
         current_aqi = int(latest.get("us_aqi", 0))
         category = get_aqi_category(current_aqi)
-        last_updated = str(latest["date"])
+        
+        # Convert last updated to local Pakistan timezone for display
+        local_updated = pd.Timestamp(latest["date"]).tz_convert("Asia/Karachi")
+        last_updated = local_updated.strftime("%Y-%m-%d %H:%M:%S")
+        
         pm25 = round(float(latest.get("pm2_5", 0)), 1)
 
-        # History for chart (last 48 hours)
+        # History for chart (last 48 hours) - convert to local Pakistan timezone
         hist_48 = past_df.tail(48)
         history_chart = [
-            {"date": str(r["date"]), "aqi": round(float(r["us_aqi"]), 1)}
+            {
+                "date": pd.Timestamp(r["date"]).tz_convert("Asia/Karachi").isoformat(),
+                "aqi": round(float(r["us_aqi"]), 1)
+            }
             for _, r in hist_48.iterrows()
         ]
 
-        # Forecast
+        # Forecast - we generate 96 hours to cover 3 full local days after today
         if model and features:
-            cache_key = (district, 72, str(latest["date"]))
+            cache_key = (district, 96, str(latest["date"]))
             if cache_key in _cached_forecasts:
                 forecast = _cached_forecasts[cache_key]
             else:
@@ -223,7 +265,7 @@ async def dashboard(request: Request, district: str = "Abbottabad"):
                 if "district" in recent.columns:
                     recent = recent.drop(columns=["district"])
                 try:
-                    forecast = generate_forecast(model, features, recent)
+                    forecast = generate_forecast(model, features, recent, full_df=df, hours=96)
                     _cached_forecasts[cache_key] = forecast
                 except Exception as e:
                     print(f"Forecast error: {e}")
@@ -231,14 +273,13 @@ async def dashboard(request: Request, district: str = "Abbottabad"):
             
             if forecast:
                 try:
-                    # Daily averages for 3 day cards
+                    # Daily averages for 3 day cards using the full 96h forecast
                     fc_df = pd.DataFrame(forecast)
                     fc_df["date_parsed"] = pd.to_datetime(fc_df["date"])
-                    # Convert to Pakistan time to align with local day boundaries
                     fc_df["date_local"] = fc_df["date_parsed"].dt.tz_convert("Asia/Karachi")
                     fc_df["day"] = fc_df["date_local"].dt.date
                     today = pd.Timestamp.now(tz="Asia/Karachi").date()
-                    fc_df = fc_df[fc_df["day"] >= today]
+                    fc_df = fc_df[fc_df["day"] > today]
                     daily = fc_df.groupby("day")["predicted_aqi"].mean().head(3)
                     for day, avg in daily.items():
                         label, color, _ = get_aqi_category(int(avg))
@@ -291,7 +332,7 @@ async def dashboard(request: Request, district: str = "Abbottabad"):
         "pm25": pm25,
         "model_name": model_name,
         "daily_forecast": daily_forecast,
-        "forecast_json": forecast,
+        "forecast_json": forecast[:72],
         "history_json": history_chart,
         "model_results": model_results,
         "shap_importance": shap_importance,
@@ -348,7 +389,7 @@ async def api_forecast(district: str = "Abbottabad", hours: int = 72):
         recent = past_df.tail(100).copy()
         if "district" in recent.columns:
             recent = recent.drop(columns=["district"])
-        preds = generate_forecast(model, features, recent, hours=min(hours, 168))
+        preds = generate_forecast(model, features, recent, full_df=df, hours=min(hours, 168))
         _cached_forecasts[cache_key] = preds
     return {"district": district, "model": name, "forecast": preds}
 
@@ -372,8 +413,11 @@ async def api_history(district: str = "Abbottabad", hours: int = 168):
         past_df = df
     past_df = past_df.tail(hours)
     data = [
-        {"date": str(r["date"]), "aqi": round(float(r["us_aqi"]), 1),
-         "pm25": round(float(r.get("pm2_5", 0)), 1)}
+        {
+            "date": pd.Timestamp(r["date"]).tz_convert("Asia/Karachi").isoformat(),
+            "aqi": round(float(r["us_aqi"]), 1),
+            "pm25": round(float(r.get("pm2_5", 0)), 1)
+        }
         for _, r in past_df.iterrows()
     ]
     return {"district": district, "records": len(data), "data": data}

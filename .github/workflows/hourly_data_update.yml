@@ -30,7 +30,7 @@ jobs:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
           HOPSWORKS_PROJECT: ${{ secrets.HOPSWORKS_PROJECT }}
           HOPSWORKS_HOST: eu-west.cloud.hopsworks.ai
-        run: python src/data_ingestion.py
+        run: python update_data.py
 
       - name: Commit updated data
         env:
