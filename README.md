@@ -11,6 +11,8 @@
 The system is deployed live in production:
 * **Production URL**: [https://hazara-aqi.onrender.com](https://hazara-aqi.onrender.com)
 * **Accessing Detailed Data**: To view or export complete time-series forecasts, navigate to the **Data & Export** tab for your selected city and click **Download Full 72-Hour CSV** at the bottom of the page.
+* **Automated Data & ML Pipeline (MLOps)**: The system implements a fully automated MLOps pipeline. GitHub Actions workflows run on a schedule (hourly data updates and daily model retraining runs) using your own data-fetching and preprocessing scripts to keep the app up to date with real-time conditions. The `github-actions[bot]` user seen in the repository's activity logs represents this background automated system execution, which handles the server-side cron triggers and pushes the fresh datasets and model weights to keep the live application synchronized.
+
 
 ---
 
