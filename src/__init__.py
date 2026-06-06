@@ -1,1 +1,1 @@
-# Hazara AQI Source Package
+# Hazara AQI package

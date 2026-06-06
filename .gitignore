@@ -50,3 +50,7 @@ env/
 # Data cache from API
 data/.cache/
 data/.cache.sqlite
+
+# Logs
+*.log
+server.log

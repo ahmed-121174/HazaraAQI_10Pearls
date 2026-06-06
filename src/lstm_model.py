@@ -1,13 +1,6 @@
 """
-LSTM Deep Learning Model — Hazara Division AQI
-================================================
-Builds and trains an LSTM (Long Short-Term Memory) neural network
-for time-series AQI forecasting using TensorFlow/Keras.
-
-Why LSTM?
-  - Designed for sequential/time-series data
-  - Remembers long-range temporal patterns
-  - Handles non-linear relationships between pollutants
+LSTM deep learning model for Hazara Division AQI.
+Uses sequential neural network for time series forecasting.
 """
 
 import os
@@ -37,7 +30,7 @@ PATIENCE     = 10
 
 
 def build_sequences(data_array, seq_len=SEQUENCE_LEN):
-    """Convert flat time-series array into (X, y) sequence pairs."""
+    """Convert time series array into (X, y) sequence pairs."""
     X, y = [], []
     for i in range(len(data_array) - seq_len):
         X.append(data_array[i : i + seq_len])
@@ -46,7 +39,7 @@ def build_sequences(data_array, seq_len=SEQUENCE_LEN):
 
 
 def build_lstm_model(input_shape):
-    """Build the LSTM architecture."""
+    """Create LSTM model structure."""
     model = Sequential([
         LSTM(64, input_shape=input_shape, return_sequences=True),
         BatchNormalization(),
@@ -67,12 +60,11 @@ def build_lstm_model(input_shape):
 
 def train_lstm(df, models_dir, district="Abbottabad"):
     """
-    Train the LSTM model on AQI time-series data.
-    Returns (model, scaler, metrics_dict).
+    Train LSTM model on AQI time series.
     """
     print(f"\n  [LSTM] Preparing sequences from {district} data...")
 
-    # Use only AQI column for univariate LSTM
+    # Use AQI column for LSTM
     df_dist = df[df['district'] == district].sort_values('date').copy()
     df_dist['date'] = pd.to_datetime(df_dist['date'])
     if df_dist['date'].dt.tz is not None:
@@ -81,20 +73,20 @@ def train_lstm(df, models_dir, district="Abbottabad"):
 
     aqi_values = df_dist['us_aqi'].dropna().values.reshape(-1, 1)
 
-    # Scale to [0, 1]
+    # Scale data
     scaler = MinMaxScaler(feature_range=(0, 1))
     aqi_scaled = scaler.fit_transform(aqi_values)
 
-    # Build sequences
+    # Create training sequences
     X, y = build_sequences(aqi_scaled, SEQUENCE_LEN)
     print(f"  [LSTM] Sequences: {X.shape} → target: {y.shape}")
 
-    # Chronological split
+    # Split train and test sets
     split = int(len(X) * 0.8)
     X_train, X_test = X[:split], X[split:]
     y_train, y_test = y[:split], y[split:]
 
-    # Reshape for LSTM: (samples, timesteps, features=1)
+    # Reshape for LSTM
     X_train = X_train.reshape(X_train.shape[0], X_train.shape[1], 1)
     X_test  = X_test.reshape(X_test.shape[0], X_test.shape[1], 1)
 
@@ -121,7 +113,7 @@ def train_lstm(df, models_dir, district="Abbottabad"):
     actual_epochs = len(history.history['loss'])
     print(f"  [LSTM] Stopped at epoch {actual_epochs}")
 
-    # Evaluate
+    # Get predictions and metrics
     y_pred_scaled = model.predict(X_test, verbose=0)
     y_pred = scaler.inverse_transform(y_pred_scaled).flatten()
     y_true = scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
@@ -132,7 +124,7 @@ def train_lstm(df, models_dir, district="Abbottabad"):
 
     print(f"  [LSTM] Test RMSE: {rmse:.4f} | MAE: {mae:.4f} | R²: {r2:.4f}")
 
-    # Save LSTM model and scaler
+    # Save model and scaler
     lstm_path   = os.path.join(models_dir, "lstm_model.keras")
     scaler_path = os.path.join(models_dir, "lstm_scaler.pkl")
     model.save(lstm_path)
@@ -148,7 +140,6 @@ def train_lstm(df, models_dir, district="Abbottabad"):
 def lstm_predict_next_72(models_dir, recent_aqi_series):
     """
     Load saved LSTM and generate 72-hour forecast.
-    recent_aqi_series: array of recent hourly AQI values (at least 24).
     """
     lstm_path   = os.path.join(models_dir, "lstm_model.keras")
     scaler_path = os.path.join(models_dir, "lstm_scaler.pkl")
@@ -176,9 +167,7 @@ def lstm_predict_next_72(models_dir, recent_aqi_series):
 
 
 if __name__ == "__main__":
-    print("=" * 50)
-    print("  LSTM Model — Standalone Training Test")
-    print("=" * 50)
+    print("  LSTM Model - Standalone Training Test")
 
     import sys
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))

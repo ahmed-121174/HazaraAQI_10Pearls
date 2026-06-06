@@ -1,9 +1,6 @@
 """
-Modeling Module — Hazara Division AQI
-======================================
-Trains multiple ML models (scikit-learn + XGBoost) and selects
-the best one based on RMSE. Also provides 72-hour iterative
-forecast generation with dampening.
+Modeling module for Hazara AQI prediction.
+Trains multiple regression models and selects the best one.
 """
 
 import sys
@@ -31,7 +28,7 @@ DEFAULT_DISTRICT = "Abbottabad"
 
 def load_training_data(district=None):
     """
-    Load training data from local CSV files.
+    Load cleaned data from local CSV.
     """
     district = district or DEFAULT_DISTRICT
 
@@ -51,7 +48,7 @@ def load_training_data(district=None):
 
 def train_and_evaluate(district=None):
     """
-    Trains multiple models and selects the best one based on RMSE.
+    Train several models and select the one with lowest RMSE.
     """
     district = district or DEFAULT_DISTRICT
 
@@ -80,7 +77,7 @@ def train_and_evaluate(district=None):
     # Preprocess
     df = preprocess_data(df, is_training=True)
 
-    # Target: next hour's AQI
+    # Predict next hour AQI
     df['target'] = df['us_aqi'].shift(-1)
     df = df.dropna()
 
@@ -91,7 +88,7 @@ def train_and_evaluate(district=None):
     X = df[features]
     y = df['target']
 
-    # Chronological split (80/20)
+    # Chronological train test split
     split_idx = int(len(df) * 0.8)
     X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
@@ -126,7 +123,7 @@ def train_and_evaluate(district=None):
             mae = mean_absolute_error(y_test, predictions)
             r2 = r2_score(y_test, predictions)
 
-            status = "<-- BEST" if rmse < best_score else ""
+            status = "* BEST" if rmse < best_score else ""
             print(f"{name:<25} {rmse:<12.4f} {mae:<12.4f} {r2:<12.4f} {status}")
 
             if rmse < best_score:
@@ -142,7 +139,7 @@ def train_and_evaluate(district=None):
 
     print(f"\n🏆 Best model: {best_name} with RMSE: {best_score:.4f}")
 
-    # Save to models/ folder
+    # Save trained model and features
     models_dir = os.path.join(project_root, "models")
     os.makedirs(models_dir, exist_ok=True)
 
@@ -158,8 +155,7 @@ def train_and_evaluate(district=None):
 
 def predict_next_72_hours(model, features, recent_data):
     """
-    Generates 72-hour (3-day) ahead forecast using iterative 1-hour predictions.
-    Uses dampening to prevent wild oscillations.
+    Generate 72 hour ahead forecast using iterative predictions.
     """
     predictions = []
     history_df = recent_data.tail(100).copy()
@@ -177,7 +173,7 @@ def predict_next_72_hours(model, features, recent_data):
         raw_pred = model.predict(X_input)[0]
         prev_aqi = history_df['us_aqi'].iloc[-1]
 
-        # Dampening: limit prediction to ±15% of previous value
+        # Limit prediction to 15 percent change from previous value
         dampening = 0.15
         lower_bound = prev_aqi * (1 - dampening)
         upper_bound = prev_aqi * (1 + dampening)

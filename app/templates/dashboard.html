@@ -187,7 +187,7 @@
     <div class="hero">
         <div>
             <h1>🏔️ Hazara Division AQI Intelligence</h1>
-            <p>{{ selected }} — Real-time Monitoring & 72-Hour Forecast</p>
+            <p>{{ selected }} (Real-time Monitoring & 72-Hour Forecast)</p>
         </div>
         <div><span class="pill">Powered by FastAPI</span></div>
     </div>
@@ -196,7 +196,7 @@
     <div class="cards">
         <!-- Current AQI -->
         <div class="card" style="border-left: 4px solid {{ cat_color }};">
-            <div class="card-title">Current Status — {{ selected }}</div>
+            <div class="card-title">Current Status: {{ selected }}</div>
             <div class="card-value">{{ current_aqi }} <span style="font-size:1rem; font-weight:400; color:{{ cat_color }};">AQI</span></div>
             <div class="card-sub">
                 <span class="pill-sm" style="background:{{ cat_color }}20; color:{{ cat_color }}; border:1px solid {{ cat_color }}40;">{{ cat_label }}</span>
@@ -280,7 +280,7 @@
     <!-- TAB 3: DATA & EXPORT -->
     <div class="tab-content" id="tab-data">
         <div class="tab-panel">
-            <h3>Forecast Data — {{ selected }}</h3>
+            <h3>Forecast Data: {{ selected }}</h3>
             {% if forecast_json %}
             <table class="data-table" id="forecastTable">
                 <thead><tr><th>Hour</th><th>Date/Time</th><th>Predicted AQI</th><th>Category</th></tr></thead>
@@ -443,7 +443,7 @@
     }
     renderChart();
 
-    // CSV Download — fetches last 72h of real observed data from history API
+    // CSV Download: fetches last 72h of real observed data from history API
     async function downloadCSV() {
         const btn = document.getElementById('downloadBtn');
         btn.textContent = '⏳ Preparing...';
@@ -505,7 +505,7 @@
 
         } catch (err) {
             console.error(err);
-            btn.textContent = '❌ Error — try again';
+            btn.textContent = '❌ Error: try again';
             btn.disabled = false;
         }
     }

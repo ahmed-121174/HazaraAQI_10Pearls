@@ -132,12 +132,12 @@ python run_pipeline.py
 ```
 
 This runs all 6 steps:
-1. **Data Collection** — Fetches 6 months of hourly data from Open-Meteo API
-2. **Data Cleaning** — Handles NaN values, clips outliers (1st-99th percentile)
-3. **Feature Engineering** — Generates 13 features (temporal + rolling + lag + derived)
-4. **ML Model Training** — Trains Linear, Ridge, Random Forest, Gradient Boosting, XGBoost
-5. **LSTM Training** — Trains a TensorFlow/Keras LSTM neural network
-6. **Hopsworks Feature Store** — Uploads features and registers model (if API key set)
+1. **Data Collection**: Fetches 6 months of hourly data from Open-Meteo API
+2. **Data Cleaning**: Handles NaN values, clips outliers (1st-99th percentile)
+3. **Feature Engineering**: Generates 13 features (temporal + rolling + lag + derived)
+4. **ML Model Training**: Trains Linear, Ridge, Random Forest, Gradient Boosting, XGBoost
+5. **LSTM Training**: Trains a TensorFlow/Keras LSTM neural network
+6. **Hopsworks Feature Store**: Uploads features and registers model (if API key set)
 
 ### 4. Launch the FastAPI Dashboard
 

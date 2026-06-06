@@ -1,13 +1,6 @@
 """
-=================================================================
-  Hazara Division AQI — Complete Pipeline
-  Step 1: Fetch data from Open-Meteo API (6 months backfill)
-  Step 2: Clean and preprocess data
-  Step 3: Engineer features
-  Step 4: Train multiple models and select the best
-  Step 5: Save model artifacts to models/
-  Step 6: Save cleaned dataset to data/
-=================================================================
+Hazara Division AQI pipeline.
+Runs data collection, cleaning, feature engineering, model training, and saving.
 """
 import os
 import sys
@@ -28,9 +21,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.linear_model import LinearRegression, Ridge
 import xgboost as xgb
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
+# Path and directories configuration
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 MODELS_DIR = os.path.join(PROJECT_ROOT, "models")
@@ -38,7 +29,7 @@ MODELS_DIR = os.path.join(PROJECT_ROOT, "models")
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(MODELS_DIR, exist_ok=True)
 
-# Hazara Division District Coordinates
+# District coordinates in Hazara
 HAZARA_DISTRICTS = {
     "Abbottabad":      {"lat": 34.1463, "lon": 73.2117},
     "Mansehra":        {"lat": 34.3302, "lon": 73.1968},
@@ -51,11 +42,9 @@ HAZARA_DISTRICTS = {
 POLLUTANT_COLS = ["pm10", "pm2_5", "carbon_monoxide", "nitrogen_dioxide",
                   "sulphur_dioxide", "ozone", "us_aqi"]
 
-# ============================================================
-# STEP 1: DATA COLLECTION
-# ============================================================
+# Data Collection
 def fetch_district_data(district_name, latitude, longitude):
-    """Fetch 6 months historical + 4 day forecast for one district."""
+    """Fetch historical and forecast data for a single district."""
     cache_session = requests_cache.CachedSession(
         os.path.join(DATA_DIR, '.cache'), expire_after=3600
     )
@@ -96,10 +85,8 @@ def fetch_district_data(district_name, latitude, longitude):
 
 
 def collect_all_data():
-    """Fetch data for all Hazara Division districts."""
-    print("=" * 60)
-    print("  STEP 1: DATA COLLECTION")
-    print("=" * 60)
+    """Fetch data for all districts."""
+    print("  Data Collection")
 
     all_data = []
     for name, coords in HAZARA_DISTRICTS.items():
@@ -124,19 +111,15 @@ def collect_all_data():
     return combined
 
 
-# ============================================================
-# STEP 2: DATA CLEANING
-# ============================================================
+# Data Cleaning
 def clean_data(df):
-    """Clean the raw dataset."""
-    print("\n" + "=" * 60)
-    print("  STEP 2: DATA CLEANING")
-    print("=" * 60)
+    """Clean the raw dataset, handle NaNs and outliers."""
+    print("  Data Cleaning")
 
     initial_len = len(df)
     print(f"  Initial records: {initial_len}")
 
-    # 2a. Check missing values
+    # Check missing values
     missing = df[POLLUTANT_COLS].isnull().sum()
     print(f"\n  Missing values before cleaning:")
     for col, count in missing.items():
@@ -145,21 +128,21 @@ def clean_data(df):
     if missing.sum() == 0:
         print("    None!")
 
-    # 2b. Forward-fill then backward-fill (appropriate for time series)
+    # Forward fill and backward fill
     df = df.sort_values(['district', 'date']).reset_index(drop=True)
     for col in POLLUTANT_COLS:
         df[col] = df.groupby('district')[col].transform(
             lambda x: x.ffill().bfill()
         )
 
-    # 2c. Handle remaining NaNs (drop rows where AQI is still null)
+    # Drop rows where target AQI is null
     before_drop = len(df)
     df = df.dropna(subset=['us_aqi'])
     dropped = before_drop - len(df)
     if dropped > 0:
         print(f"  Dropped {dropped} rows with persistent NaN in us_aqi")
 
-    # 2d. Outlier clipping (1st and 99th percentile per pollutant)
+    # Clip outliers
     print(f"\n  Outlier clipping (1st-99th percentile):")
     for col in POLLUTANT_COLS:
         lower = df[col].quantile(0.01)
@@ -169,7 +152,7 @@ def clean_data(df):
         if clipped > 0:
             print(f"    {col}: {clipped} values clipped to [{lower:.2f}, {upper:.2f}]")
 
-    # 2e. Remove negative AQI values (invalid)
+    # Remove negative AQI values
     neg = (df['us_aqi'] < 0).sum()
     if neg > 0:
         df = df[df['us_aqi'] >= 0]
@@ -184,25 +167,21 @@ def clean_data(df):
     return df
 
 
-# ============================================================
-# STEP 3: FEATURE ENGINEERING
-# ============================================================
+# Feature Engineering
 def engineer_features(df):
-    """Create time-series features for AQI prediction."""
-    print("\n" + "=" * 60)
-    print("  STEP 3: FEATURE ENGINEERING")
-    print("=" * 60)
+    """Generate time series features."""
+    print("  Feature Engineering")
 
     df = df.copy()
     df['date'] = pd.to_datetime(df['date'])
 
-    # 3a. Time-based features
+    # Time based features
     df['hour'] = df['date'].dt.hour
     df['day_of_week'] = df['date'].dt.dayofweek
     df['month'] = df['date'].dt.month
     print("  Added: hour, day_of_week, month")
 
-    # 3b. Rolling averages (per district to avoid cross-contamination)
+    # Rolling averages
     for col in ['pm10', 'pm2_5', 'us_aqi']:
         df[f'{col}_rolling_24h'] = df.groupby('district')[col].transform(
             lambda x: x.rolling(window=24, min_periods=1).mean()
@@ -218,15 +197,15 @@ def engineer_features(df):
     df['lag_24h_aqi'] = df.groupby('district')['us_aqi'].shift(24)
     print("  Added: lag_1h_aqi, lag_2h_aqi, lag_24h_aqi")
 
-    # 3d. AQI change rate (derived feature per instructions)
+    # AQI change rate
     df['aqi_change_rate'] = df.groupby('district')['us_aqi'].diff()
     print("  Added: aqi_change_rate (AQI difference from previous hour)")
 
-    # 3e. Target variable: NEXT hour's AQI
+    # Target variable
     df['target'] = df.groupby('district')['us_aqi'].shift(-1)
     print("  Added: target (next hour AQI)")
 
-    # Drop NaN rows from lag/shift operations
+    # Drop NaN rows
     before = len(df)
     df = df.dropna()
     print(f"  Dropped {before - len(df)} NaN rows from lag/shift operations")
@@ -245,14 +224,10 @@ def engineer_features(df):
     return df, feature_cols
 
 
-# ============================================================
-# STEP 4: MODEL TRAINING (Statistical + Ensemble + Boosting)
-# ============================================================
+# Model Training
 def train_models(df, feature_cols):
-    """Train multiple ML models and select the best one."""
-    print("\n" + "=" * 60)
-    print("  STEP 4a: ML MODEL TRAINING")
-    print("=" * 60)
+    """Train ML models and select the best one based on RMSE."""
+    print("  ML Model Training")
 
     df_train = df.copy()
     df_train['date'] = pd.to_datetime(df_train['date']).dt.tz_localize(None)
@@ -269,7 +244,7 @@ def train_models(df, feature_cols):
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
 
     print(f"  Train size: {len(X_train)}, Test size: {len(X_test)}")
-    print(f"\n  {'Model':<30} {'RMSE':<10} {'MAE':<10} {'R²':<10} {'Status'}")
+    print(f"\n  {'Model':<30} {'RMSE':<10} {'MAE':<10} {'R2':<10} {'Status'}")
     print("  " + "-" * 70)
 
     models = {
@@ -306,7 +281,7 @@ def train_models(df, feature_cols):
                 best_score = rmse
                 best_model = model
                 best_name = name
-                status = "<-- BEST"
+                status = "* BEST"
 
             all_results.append({
                 'name': name, 'rmse': rmse, 'mae': mae, 'r2': r2
@@ -319,26 +294,22 @@ def train_models(df, feature_cols):
     return best_model, best_name, best_score, feature_cols, all_results
 
 
-# ============================================================
-# STEP 4b: LSTM DEEP LEARNING MODEL (TensorFlow/Keras)
-# ============================================================
+# LSTM Deep Learning Model
 def train_lstm_model(clean_df, all_results, best_score, best_name, best_model):
-    """Train LSTM and compare with best ML model."""
-    print("\n" + "=" * 60)
-    print("  STEP 4b: LSTM DEEP LEARNING MODEL (TensorFlow)")
-    print("=" * 60)
+    """Train LSTM model."""
+    print("  LSTM Deep Learning Model")
 
     try:
         from src.lstm_model import train_lstm
         _, _, lstm_metrics = train_lstm(clean_df, MODELS_DIR)
         all_results.append(lstm_metrics)
 
-        # Check if LSTM beats the current best
+        # Check if LSTM beats current best model
         if lstm_metrics['rmse'] < best_score:
             print(f"\n  🧠 LSTM beats {best_name}! ({lstm_metrics['rmse']:.4f} < {best_score:.4f})")
             best_name = lstm_metrics['name']
             best_score = lstm_metrics['rmse']
-            # LSTM is saved separately as .keras, so best_model stays as ML backup
+            # LSTM saved separately, keep best ML model
         else:
             print(f"\n  📊 ML model ({best_name}) still better ({best_score:.4f} < {lstm_metrics['rmse']:.4f})")
 
@@ -351,14 +322,10 @@ def train_lstm_model(clean_df, all_results, best_score, best_name, best_model):
     return all_results, best_score, best_name
 
 
-# ============================================================
-# STEP 5: SAVE MODEL ARTIFACTS
-# ============================================================
+# Save Model Artifacts
 def save_model(model, features, model_name, results):
-    """Save the best model and feature list."""
-    print("\n" + "=" * 60)
-    print("  STEP 5: SAVING MODEL ARTIFACTS")
-    print("=" * 60)
+    """Save model and feature list."""
+    print("  Saving Model Artifacts")
 
     model_path = os.path.join(MODELS_DIR, "model.pkl")
     features_path = os.path.join(MODELS_DIR, "features.pkl")
@@ -373,12 +340,12 @@ def save_model(model, features, model_name, results):
         pickle.dump(features, f)
     print(f"  Saved features: {features_path}")
 
-    # Check if LSTM model also exists
+    # Check if LSTM model exists
     lstm_path = os.path.join(MODELS_DIR, "lstm_model.keras")
     if os.path.exists(lstm_path):
         print(f"  LSTM model: {lstm_path} ({os.path.getsize(lstm_path) / 1024:.1f} KB)")
 
-    # Save results summary
+    # Save training results
     results_df = pd.DataFrame(results)
     results_path = os.path.join(MODELS_DIR, "training_results.csv")
     results_df.to_csv(results_path, index=False)
@@ -388,10 +355,8 @@ def save_model(model, features, model_name, results):
 
 
 def save_shap_importance(model, df, feature_cols):
-    """Compute and save SHAP feature importance using the best ML model."""
-    print("\n" + "=" * 60)
-    print("  STEP 5b: COMPUTING SHAP FEATURE IMPORTANCE")
-    print("=" * 60)
+    """Compute and save SHAP feature importance."""
+    print("  Computing SHAP Feature Importance")
     try:
         import shap
         df_abbottabad = df[df['district'] == 'Abbottabad'].copy()
@@ -400,6 +365,7 @@ def save_shap_importance(model, df, feature_cols):
         X_sample = X.sample(n=sample_size, random_state=42)
         
         model_name = type(model).__name__
+        # Compute SHAP values using best model
         print(f"  [SHAP] Computing SHAP values using {model_name}...")
         
         if model_name in ['XGBRegressor', 'RandomForestRegressor', 'GradientBoostingRegressor']:
@@ -429,14 +395,10 @@ def save_shap_importance(model, df, feature_cols):
         print(f"  [SHAP] Failed to compute/save SHAP: {e}")
 
 
-# ============================================================
-# STEP 6: HOPSWORKS FEATURE STORE (Optional)
-# ============================================================
+# Hopsworks Feature Store
 def push_to_hopsworks(feat_df, rmse=None):
-    """Upload features and model to Hopsworks if API key is available."""
-    print("\n" + "=" * 60)
-    print("  STEP 6: HOPSWORKS FEATURE STORE")
-    print("=" * 60)
+    """Upload features to Hopsworks feature store."""
+    print("  Hopsworks Feature Store")
 
     try:
         from src.feature_store import upload_features, register_model
@@ -453,45 +415,37 @@ def push_to_hopsworks(feat_df, rmse=None):
         print(f"  [Hopsworks] Error: {e}")
 
 
-# ============================================================
-# MAIN PIPELINE
-# ============================================================
+# Main Pipeline
 if __name__ == "__main__":
-    print("\n" + "=" * 60)
-    print("  HAZARA DIVISION AQI - COMPLETE PIPELINE")
-    print(f"  Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
+    print("  Hazara AQI Pipeline")
 
-    # Step 1: Collect data from Open-Meteo API
+    # Collect data
     raw_df = collect_all_data()
 
-    # Step 2: Clean data
+    # Clean data
     clean_df = clean_data(raw_df)
 
-    # Step 3: Engineer features
+    # Engineer features
     feat_df, feature_cols = engineer_features(clean_df)
 
-    # Step 4a: Train ML models (statistical + ensemble + boosting)
+    # Train ML models
     best_model, best_name, best_score, features, results = train_models(feat_df, feature_cols)
 
-    # Step 4b: Train LSTM deep learning model (TensorFlow)
+    # Train LSTM model
     results, best_score, best_name = train_lstm_model(clean_df, results, best_score, best_name, best_model)
 
     print(f"\n  {'='*70}")
     print(f"  OVERALL WINNER: {best_name} (RMSE: {best_score:.4f})")
     print(f"  {'='*70}")
 
-    # Step 5: Save all artifacts
+    # Save all artifacts
     save_model(best_model, features, best_name, results)
     save_shap_importance(best_model, feat_df, feature_cols)
 
-    # Step 6: Hopsworks Feature Store (optional)
+    # Hopsworks feature store
     push_to_hopsworks(feat_df, rmse=best_score)
 
-    print("\n" + "=" * 60)
-    print(f"  PIPELINE COMPLETE!")
-    print(f"  Finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
+    print("  Pipeline Complete")
     print(f"\n  Files created:")
     print(f"    data/raw_hazara_aqi.csv")
     print(f"    data/cleaned_hazara_aqi.csv")

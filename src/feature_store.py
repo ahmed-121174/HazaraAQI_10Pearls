@@ -1,16 +1,6 @@
 """
-Hopsworks Feature Store Integration
-====================================
-Connects to Hopsworks (free tier) for:
-  - Storing engineered features in a Feature Group
-  - Retrieving features for model training
-  - Registering trained models in the Model Registry
-
-Setup:
-  1. Create free account at https://app.hopsworks.ai
-  2. Create a project
-  3. Get your API key from Account Settings
-  4. Set HOPSWORKS_API_KEY in your .env file
+Hopsworks feature store integration.
+Handles saving and retrieving features and model registry.
 """
 
 import os
@@ -24,7 +14,7 @@ HOPSWORKS_PROJECT = os.getenv("HOPSWORKS_PROJECT", "HazaraAQI")
 HOPSWORKS_HOST = os.getenv("HOPSWORKS_HOST", "eu-west.cloud.hopsworks.ai")
 
 def get_hopsworks_connection():
-    """Establish connection to Hopsworks."""
+    """Connect to Hopsworks API."""
     if not HOPSWORKS_API_KEY:
         print("  [Hopsworks] HOPSWORKS_API_KEY not set. Skipping Feature Store.")
         return None
@@ -45,8 +35,7 @@ def get_hopsworks_connection():
 
 def upload_features(df, feature_group_name="hazara_aqi_features", version=1):
     """
-    Upload engineered features to Hopsworks Feature Store.
-    Creates the feature group if it doesn't exist.
+    Upload engineered features to Hopsworks.
     """
     project = get_hopsworks_connection()
     if project is None:
@@ -55,12 +44,12 @@ def upload_features(df, feature_group_name="hazara_aqi_features", version=1):
     try:
         fs = project.get_feature_store()
 
-        # Prepare data for Hopsworks (needs event_time column)
+        # Add event_time column
         upload_df = df.copy()
         if 'date' in upload_df.columns:
             upload_df['event_time'] = pd.to_datetime(upload_df['date'])
         
-        # Drop non-numeric columns that Hopsworks can't handle well
+        # Drop non-numeric columns
         drop_cols = [c for c in upload_df.columns if upload_df[c].dtype == 'object' and c != 'district']
         upload_df = upload_df.drop(columns=drop_cols, errors='ignore')
 
@@ -83,8 +72,7 @@ def upload_features(df, feature_group_name="hazara_aqi_features", version=1):
 
 def get_features(feature_group_name="hazara_aqi_features", version=1, district=None):
     """
-    Retrieve features from Hopsworks Feature Store.
-    Returns a DataFrame or None if unavailable.
+    Get features from Hopsworks.
     """
     project = get_hopsworks_connection()
     if project is None:
@@ -110,7 +98,7 @@ def get_features(feature_group_name="hazara_aqi_features", version=1, district=N
 
 def register_model(model_path, model_name="hazara_aqi_model", metrics=None):
     """
-    Register a trained model in Hopsworks Model Registry.
+    Save trained model in registry.
     """
     project = get_hopsworks_connection()
     if project is None:
@@ -142,7 +130,7 @@ if __name__ == "__main__":
     project = get_hopsworks_connection()
     if project:
         print("  Connection successful!")
-        # Test: upload a small sample
+        # Upload a small sample to test
         sample = pd.DataFrame({
             'date': pd.date_range('2026-01-01', periods=5, freq='h'),
             'district': 'Abbottabad',

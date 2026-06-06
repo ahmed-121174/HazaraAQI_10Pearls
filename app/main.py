@@ -1,15 +1,6 @@
 """
-FastAPI Backend — Hazara Division AQI Intelligence
-===================================================
-Production-grade FastAPI + Jinja2 web application.
-
-Endpoints:
-  GET  /                  → Dashboard HTML page
-  GET  /api/current       → Current AQI for a district
-  GET  /api/forecast      → 72-hour forecast
-  GET  /api/districts     → List available districts
-  GET  /api/history       → Historical AQI data
-  GET  /api/models        → Model leaderboard
+FastAPI backend for Hazara AQI dashboard.
+Defines endpoints for fetching current air quality index and forecasting.
 """
 
 import sys
@@ -32,7 +23,7 @@ if project_root not in sys.path:
 
 from src.preprocessing import preprocess_data
 
-# ── App Setup ──
+# App Setup
 app = FastAPI(
     title="Hazara Division AQI Intelligence",
     description="Air Quality Prediction API for Hazara Division, KPK",
@@ -56,7 +47,7 @@ async def startup_event():
     print("  [FastAPI] Startup initialization complete.")
 
 
-# ── Constants ──
+# Constants
 HAZARA_DISTRICTS = [
     "Abbottabad", "Mansehra", "Haripur",
     "Battagram", "Upper Kohistan", "Torghar"
@@ -69,7 +60,7 @@ RESULTS_PATH = os.path.join(project_root, "models", "training_results.csv")
 SHAP_PATH = os.path.join(project_root, "models", "shap_importance.csv")
 
 
-# ── Global Cache ──
+# Global Cache
 _cached_model = None
 _cached_features = None
 _cached_model_name = None
@@ -78,7 +69,7 @@ _cached_data = None
 _cached_forecasts = {}
 
 
-# ── Helper Functions ──
+# Helper Functions
 def load_model():
     """Load model and features from local disk."""
     global _cached_model, _cached_features, _cached_model_name
@@ -146,7 +137,7 @@ def get_aqi_category(aqi):
 
 
 def generate_forecast(model, features, recent_data, hours=72):
-    """Generate iterative n-hour forecast with dampening."""
+    """Generate forecast for given hours."""
     predictions = []
     history = recent_data.tail(100).copy()
 
@@ -181,9 +172,7 @@ def generate_forecast(model, features, recent_data, hours=72):
     return predictions
 
 
-# ══════════════════════════════════════════════
-# API ENDPOINTS
-# ══════════════════════════════════════════════
+# API Endpoints
 
 @app.head("/", include_in_schema=False)
 async def head_dashboard():

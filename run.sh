@@ -1,13 +1,11 @@
 #!/bin/bash
-# ============================================================
-#   Hazara Division AQI — Run & Stop Script
-#   Usage:
-#     ./run.sh start      → Start the FastAPI dashboard
-#     ./run.sh stop       → Stop the dashboard
-#     ./run.sh pipeline   → Run the full ML pipeline
-#     ./run.sh status     → Check if the server is running
-#     ./run.sh restart    → Stop and start the server
-# ============================================================
+# Path and execution script
+# Usage:
+#   ./run.sh start      -> Start server
+#   ./run.sh stop       -> Stop server
+#   ./run.sh pipeline   -> Run ML pipeline
+#   ./run.sh status     -> Check status
+#   ./run.sh restart    -> Restart server
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV="$PROJECT_DIR/venv/bin/activate"
@@ -35,9 +33,7 @@ is_running() {
 }
 
 start_server() {
-    echo -e "${GREEN}============================================${NC}"
-    echo -e "${GREEN}  Hazara Division AQI — Starting Dashboard${NC}"
-    echo -e "${GREEN}============================================${NC}"
+    echo -e "${GREEN}  Hazara Division AQI - Starting Dashboard${NC}"
 
     # Check if already running
     if is_running; then
@@ -72,9 +68,7 @@ start_server() {
 }
 
 stop_server() {
-    echo -e "${YELLOW}============================================${NC}"
-    echo -e "${YELLOW}  Hazara Division AQI — Stopping Dashboard${NC}"
-    echo -e "${YELLOW}============================================${NC}"
+    echo -e "${YELLOW}  Hazara Division AQI - Stopping Dashboard${NC}"
 
     if is_running; then
         fuser -k $PORT/tcp >/dev/null 2>&1
@@ -86,9 +80,7 @@ stop_server() {
 }
 
 run_pipeline() {
-    echo -e "${GREEN}============================================${NC}"
-    echo -e "${GREEN}  Hazara Division AQI — Running Pipeline${NC}"
-    echo -e "${GREEN}============================================${NC}"
+    echo -e "${GREEN}  Hazara Division AQI - Running Pipeline${NC}"
     echo ""
     echo "This will:"
     echo "  1. Fetch data from Open-Meteo API (6 districts)"
@@ -105,9 +97,7 @@ run_pipeline() {
 }
 
 check_status() {
-    echo -e "${GREEN}============================================${NC}"
-    echo -e "${GREEN}  Hazara Division AQI — Status Check${NC}"
-    echo -e "${GREEN}============================================${NC}"
+    echo -e "${GREEN}  Hazara Division AQI - Status Check${NC}"
 
     if is_running; then
         echo -e "Server:    ${GREEN}RUNNING${NC} on port $PORT"
@@ -139,7 +129,7 @@ check_status() {
     [ -f "$PROJECT_DIR/data/cleaned_hazara_aqi.csv" ] && echo -e "  ${GREEN}✅ cleaned_hazara_aqi.csv${NC}" || echo -e "  ${RED}❌ cleaned data missing${NC}"
 }
 
-# ── Main ──
+# Main entrypoint
 case "${1}" in
     start)
         start_server
@@ -159,9 +149,7 @@ case "${1}" in
         check_status
         ;;
     *)
-        echo "============================================"
-        echo "  Hazara Division AQI — Command Reference"
-        echo "============================================"
+        echo "  Hazara Division AQI - Command Reference"
         echo ""
         echo "Usage: ./run.sh <command>"
         echo ""

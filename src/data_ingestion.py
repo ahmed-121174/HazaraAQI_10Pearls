@@ -1,12 +1,11 @@
 import sys
 import os
 
-# --- PATH FIX ---
+# Path configuration
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.abspath(os.path.join(current_dir, '..'))
 if project_root not in sys.path:
     sys.path.append(project_root)
-# ----------------
 
 import openmeteo_requests
 import requests_cache
@@ -26,8 +25,8 @@ HAZARA_DISTRICTS = {
 
 def fetch_district_data(district_name, latitude, longitude):
     """
-    Fetches historical + short-term forecast data for a single district
-    from the Open-Meteo Air Quality API.
+    Get historical and short term forecast data for a single district
+    from Open Meteo API.
     """
     cache_session = requests_cache.CachedSession('.cache', expire_after=3600)
     retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
@@ -69,8 +68,7 @@ def fetch_district_data(district_name, latitude, longitude):
 
 def fetch_all_districts():
     """
-    Fetches air quality data for all Hazara Division districts.
-    Returns a combined DataFrame with a 'district' column.
+    Get air quality data for all districts in Hazara.
     """
     all_data = []
     for name, coords in HAZARA_DISTRICTS.items():
@@ -102,7 +100,7 @@ if __name__ == "__main__":
         df.to_csv(csv_path, index=False)
         print(f"✅ Data saved to {csv_path}")
 
-        # Upload to Hopsworks Feature Store (if configured)
+        # Upload features to feature store
         try:
             from src.feature_store import upload_features
             upload_features(df)
