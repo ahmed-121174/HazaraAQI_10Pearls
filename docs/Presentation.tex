@@ -1,0 +1,154 @@
+\documentclass[aspectratio=169]{beamer}
+\usetheme{Madrid}
+
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xcolor}
+
+% Custom premium theme colors (Slate / Dark Cyan)
+\definecolor{slate}{RGB}{30, 41, 59}
+\definecolor{cyan}{RGB}{14, 116, 144}
+\definecolor{lightgray}{RGB}{241, 245, 249}
+
+\setbeamercolor{palette primary}{bg=slate,fg=white}
+\setbeamercolor{palette secondary}{bg=cyan,fg=white}
+\setbeamercolor{palette tertiary}{bg=slate,fg=white}
+\setbeamercolor{structure}{fg=slate}
+\setbeamercolor{background canvas}{bg=white}
+
+\title[AQI Prediction \& Monitoring]{Hazara Division AQI Prediction System}
+\subtitle{Real-Time Environmental Monitoring \& Forecasting}
+\author[Ahmed Ali]{Ahmed Ali}
+\institute[10Pearls]{10Pearls Internship Project}
+\date{June 2026}
+
+\begin{document}
+
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Project Overview}
+  \begin{itemize}
+    \item \textbf{Objective}: Provide localized hourly tracking and 72-hour air quality forecasts for Hazara Division, KPK.
+    \item \textbf{Scope}: Covers 6 key districts: Abbottabad, Haripur, Mansehra, Battagram, Upper Kohistan, and Torghar.
+    \item \textbf{Core System}:
+      \begin{itemize}
+        \item Automated ingestion of weather and air pollutant concentrations.
+        \item 6 predictive models (Linear, Ridge, RF, Gradient Boosting, XGBoost, LSTM).
+        \item Interactive FastAPI dashboard for real-time visualization and data exports.
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Environmental Motivation}
+  \begin{block}{The Valley Inversion Phenomenon}
+    Unlike open coastal regions, Hazara Division's geography features deep mountain valleys that trap emissions.
+  \end{block}
+  \begin{itemize}
+    \item \textbf{Temperature Inversions}: Cold air settles in valley basins overnight, trapping pollutants close to the ground.
+    \item \textbf{Topographical Barriers}: High mountains block horizontal wind dispersion, creating persistent local pollution.
+    \item \textbf{Seasonal Drivers}: Winter wood heating, dust, and agricultural waste burning cause sharp spikes in particulate matter.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Data Pipeline \& Ingestion}
+  \begin{itemize}
+    \item \textbf{Data Source}: Open-Meteo Air Quality API.
+    \item \textbf{Target Metric}: US Air Quality Index (US AQI).
+    \item \textbf{Pollutants Monitored}:
+      \begin{itemize}
+        \item Particulate Matter (PM2.5, PM10).
+        \item Gaseous species (CO, NO2, SO2, Ozone).
+      \end{itemize}
+    \item \textbf{Data Cleaning}:
+      \begin{itemize}
+        \item Handled extreme outliers by clipping at the 1st and 99th percentiles.
+        \item Filled missing intervals using forward-fill (FFill) and backward-fill (BFill).
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Feature Engineering}
+  We engineer 13 dynamic features to capture persistence and trends:
+  \begin{itemize}
+    \item \textbf{Lag Features}: 1-hour, 2-hour, and 24-hour lags of AQI to model short-term persistence.
+    \item \textbf{Rolling Statistics}: 6-hour and 24-hour moving averages for PM2.5 and overall AQI to track background build-up.
+    \item \textbf{Rate of Change}: First-order difference of the AQI value to capture build-up velocity.
+    \item \textbf{Diurnal \& Seasonal Indicators}: Time of day, day of the week, and month of the year.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Model Comparisons}
+  Models evaluated using chronological 80/20 train/test split:
+  \begin{center}
+    \begin{tabular}{llccc}
+      \toprule
+      Model Type & Category & RMSE & MAE & $R^2$ Score \\
+      \midrule
+      \textbf{Linear Regression} & Statistical & \textbf{4.6796} & \textbf{2.2829} & \textbf{0.8659} \\
+      Ridge Regression & Regularized & 4.6797 & 2.2831 & 0.8659 \\
+      XGBoost & Boosting & 5.8714 & 3.0906 & 0.7891 \\
+      Gradient Boosting & Boosting & 5.9938 & 3.2084 & 0.7802 \\
+      Random Forest & Ensemble & 7.4568 & 3.8614 & 0.6593 \\
+      LSTM & Neural Network & 10.0665 & 7.9150 & 0.3781 \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+\end{frame}
+
+\begin{frame}{Model Insights}
+  \begin{itemize}
+    \item \textbf{Linear Performance}: Linear and Ridge regression models achieved the lowest error. Short-term air quality is highly linear (correlation coefficient of lag-1h with target AQI exceeds 0.95).
+    \item \textbf{Deep Learning Representation}: LSTM models capture temporal dependencies over the past 24 hours. While standalone metrics are higher, it handles non-linear dynamics effectively.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Explainability (SHAP Values)}
+  To verify predictions, we calculated global SHAP importance for the primary model:
+  \begin{itemize}
+    \item \textbf{1. Lag-1h AQI} (Most critical): Dictates immediate persistence (current air directly affects the next hour).
+    \item \textbf{2. 24h Rolling AQI}: Represents background accumulations and slow dispersion patterns.
+    \item \textbf{3. PM2.5 24h Average}: Confirms fine particulate matter as the major driving pollutant across all districts.
+    \item \textbf{4. Diurnal Hour}: Captures morning/evening rush hour patterns and daily thermal cycles.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Dashboard \& Web Interface}
+  \begin{itemize}
+    \item \textbf{Backend}: FastAPI for high performance, request routing, and asynchronous API endpoints.
+    \item \textbf{Frontend UI}: Clean dark theme built with vanilla HTML/CSS.
+    \item \textbf{Key Features}:
+      \begin{itemize}
+        \item District Selection: Quick switching across all six districts.
+        \item Model Selection: Interactive leaderboard showing active metrics.
+        \item Interactive Charts: Embedded Plotly visualizations for history and forecasts.
+        \item Explainability Panel: Live rendering of SHAP feature importance.
+        \item Data Export: Single-click download of full 72-hour forecast CSVs.
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Production Automation (MLOps)}
+  \begin{itemize}
+    \item \textbf{Local Controller}: `run.sh` script to manage execution, status checks, and local manual pipelines.
+    \item \textbf{Automated Ingestion}: GitHub Actions workflow runs every hour to fetch raw readings, clean data, and update CSV storages.
+    \item \textbf{Automated Retraining}: Daily GitHub Actions workflow retrains all models, computes fresh validation metrics, regenerates SHAP plots, and pushes update files.
+    \item \textbf{Automatic Redeployments}: Connected to Render hosting platform for instant deployments on commit.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Conclusion \& Future Outlook}
+  \begin{itemize}
+    \item Successfully built and deployed a production-grade AQI prediction platform.
+    \item Solved key localization issues including valley inversion modeling and local timezone alignment.
+    \item \textbf{Future Work}:
+      \begin{itemize}
+        \item Integrate local physical meteorological models (WRF) for wind vectors.
+        \item Incorporate holiday and industrial activity schedules into features.
+        \item Expand coverage to additional districts in KPK.
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\end{document}
