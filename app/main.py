@@ -193,14 +193,21 @@ async def dashboard(request: Request, district: str = "Abbottabad"):
     history_chart = []
 
     if not df.empty:
-        latest = df.iloc[-1]
+        # Filter data to only include records up to now
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        past_df = df[df["date"] <= now]
+        if past_df.empty:
+            past_df = df
+            
+        latest = past_df.iloc[-1]
         current_aqi = int(latest.get("us_aqi", 0))
         category = get_aqi_category(current_aqi)
         last_updated = str(latest["date"])
         pm25 = round(float(latest.get("pm2_5", 0)), 1)
 
         # History for chart (last 48 hours)
-        hist_48 = df.tail(48)
+        hist_48 = past_df.tail(48)
         history_chart = [
             {"date": str(r["date"]), "aqi": round(float(r["us_aqi"]), 1)}
             for _, r in hist_48.iterrows()
@@ -208,11 +215,11 @@ async def dashboard(request: Request, district: str = "Abbottabad"):
 
         # Forecast
         if model and features:
-            cache_key = (district, 72)
+            cache_key = (district, 72, str(latest["date"]))
             if cache_key in _cached_forecasts:
                 forecast = _cached_forecasts[cache_key]
             else:
-                recent = df.tail(100).copy()
+                recent = past_df.tail(100).copy()
                 if "district" in recent.columns:
                     recent = recent.drop(columns=["district"])
                 try:
@@ -297,7 +304,12 @@ async def api_current(district: str = "Abbottabad"):
     df = load_data(district)
     if df.empty:
         return JSONResponse({"error": "No data"}, status_code=404)
-    latest = df.iloc[-1]
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    past_df = df[df["date"] <= now]
+    if past_df.empty:
+        past_df = df
+    latest = past_df.iloc[-1]
     aqi = int(latest.get("us_aqi", 0))
     cat = get_aqi_category(aqi)
     return {
@@ -321,11 +333,17 @@ async def api_forecast(district: str = "Abbottabad", hours: int = 72):
     df = load_data(district)
     if df.empty:
         return JSONResponse({"error": "No data"}, status_code=404)
-    cache_key = (district, hours)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    past_df = df[df["date"] <= now]
+    if past_df.empty:
+        past_df = df
+    latest = past_df.iloc[-1]
+    cache_key = (district, hours, str(latest["date"]))
     if cache_key in _cached_forecasts:
         preds = _cached_forecasts[cache_key]
     else:
-        recent = df.tail(100).copy()
+        recent = past_df.tail(100).copy()
         if "district" in recent.columns:
             recent = recent.drop(columns=["district"])
         preds = generate_forecast(model, features, recent, hours=min(hours, 168))
@@ -345,11 +363,16 @@ async def api_history(district: str = "Abbottabad", hours: int = 168):
     df = load_data(district)
     if df.empty:
         return JSONResponse({"error": "No data"}, status_code=404)
-    df = df.tail(hours)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    past_df = df[df["date"] <= now]
+    if past_df.empty:
+        past_df = df
+    past_df = past_df.tail(hours)
     data = [
         {"date": str(r["date"]), "aqi": round(float(r["us_aqi"]), 1),
          "pm25": round(float(r.get("pm2_5", 0)), 1)}
-        for _, r in df.iterrows()
+        for _, r in past_df.iterrows()
     ]
     return {"district": district, "records": len(data), "data": data}
 
